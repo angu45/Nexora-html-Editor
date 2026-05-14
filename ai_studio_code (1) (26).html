@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Nexora Studio | Professional Neural Workspace</title>
+    
+    <!-- Professional Assets -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+    <style>
+        :root {
+            --bg: #020205;
+            --surface: rgba(10, 10, 15, 0.95);
+            --accent: #00f2ff;
+            --accent-glow: rgba(0, 242, 255, 0.2);
+            --text: #e0e0e8;
+            --text-dim: #707080;
+            --border: rgba(255, 255, 255, 0.08);
+            --header-h: 65px;
+            --sub-h: 45px;
+            --status-h: 30px;
+        }
+
+        /* Unique Themes */
+        .theme-midnight-neon { --accent: #ff007a; --accent-glow: rgba(255, 0, 122, 0.2); }
+        .theme-aurora { --accent: #00ffcc; --accent-glow: rgba(0, 255, 204, 0.2); }
+        .theme-quantum { --accent: #2979ff; --accent-glow: rgba(41, 121, 255, 0.2); }
+        .theme-carbon { --accent: #ffffff; --accent-glow: rgba(255, 255, 255, 0.1); }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; outline: none; }
+        body, html { margin: 0; padding: 0; height: 100dvh; width: 100vw; background: var(--bg); color: var(--text); font-family: 'Outfit', sans-serif; overflow: hidden; }
+
+        /* HEADER UI */
+        .main-header {
+            height: var(--header-h); background: var(--surface); backdrop-filter: blur(25px);
+            border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;
+            padding: 0 20px; z-index: 1000;
+        }
+        .brand { font-weight: 600; display: flex; align-items: center; gap: 12px; letter-spacing: 3px; font-size: 0.9rem; }
+        .brand .orb { width: 12px; height: 12px; background: var(--accent); border-radius: 50%; box-shadow: 0 0 15px var(--accent); }
+
+        .toolbar { display: flex; gap: 8px; }
+        .btn {
+            background: rgba(255,255,255,0.03); border: 1px solid var(--border); color: var(--text);
+            padding: 8px 14px; border-radius: 10px; cursor: pointer; font-size: 0.75rem;
+            display: flex; align-items: center; gap: 8px; transition: 0.2s;
+        }
+        .btn:hover { background: var(--accent); color: #000; transform: translateY(-1px); }
+        .btn-run { background: var(--accent); color: #000; font-weight: 600; border: none; }
+        
+        /* SUB-HEADER TABS */
+        .tab-bar {
+            height: var(--sub-h); background: rgba(0,0,0,0.4); border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; padding: 0 10px; gap: 5px; overflow-x: auto;
+        }
+        .tab {
+            height: 32px; padding: 0 12px; background: rgba(255,255,255,0.02);
+            border: 1px solid var(--border); border-radius: 6px; display: flex; align-items: center;
+            gap: 10px; font-size: 0.8rem; cursor: pointer; white-space: nowrap; transition: 0.2s;
+        }
+        .tab.active { background: var(--accent-glow); border-color: var(--accent); color: var(--accent); }
+        .tab-options { font-size: 0.6rem; opacity: 0.5; padding: 4px; }
+        .tab-options:hover { opacity: 1; color: var(--accent); }
+
+        /* WORKSPACE (ZERO TRANSITIONS) */
+        #workspace-root {
+            height: calc(100dvh - var(--header-h) - var(--sub-h) - var(--status-h));
+            width: 100%; position: relative;
+        }
+
+        /* CONTEXT MENU */
+        #file-menu {
+            position: fixed; background: #0c0c12; border: 1px solid var(--accent);
+            border-radius: 12px; padding: 8px 0; min-width: 180px; z-index: 5000;
+            display: none; box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+        }
+        .menu-item { padding: 10px 16px; font-size: 0.8rem; cursor: pointer; display: flex; gap: 10px; align-items: center; }
+        .menu-item:hover { background: var(--accent); color: #000; }
+
+        /* PREVIEW ENGINE UI */
+        .preview-cinema {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.98); z-index: 7000;
+            display: none; flex-direction: column; backdrop-filter: blur(20px);
+        }
+        .preview-controls {
+            height: 60px; background: var(--surface); display: flex; align-items: center;
+            justify-content: space-between; padding: 0 20px; border-bottom: 1px solid var(--border);
+        }
+        .iframe-stage { flex: 1; display: flex; align-items: center; justify-content: center; background: #111; overflow: hidden; }
+        #preview-frame { background: white; border: none; box-shadow: 0 0 50px rgba(0,0,0,0.5); transition: 0.4s cubic-bezier(0.1, 0.7, 0.1, 1); }
+        .stage-mobile { width: 375px; height: 667px; border-radius: 20px; outline: 10px solid #222; }
+        .stage-desktop { width: 100%; height: 100%; }
+
+        /* SETTINGS HUB */
+        .settings-win {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 90%; max-width: 500px; background: #08080c; border: 1px solid var(--border);
+            border-radius: 24px; padding: 35px; z-index: 6000; display: none; box-shadow: 0 0 100px rgba(0,0,0,0.8);
+        }
+        .settings-win.active { display: block; border-color: var(--accent); }
+        .field { margin-bottom: 25px; }
+        .field label { display: block; font-size: 0.7rem; color: var(--text-dim); margin-bottom: 12px; letter-spacing: 1px; }
+
+        input[type="range"] {
+            width: 100%; -webkit-appearance: none; background: #1a1a24; height: 4px; border-radius: 2px;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; height: 18px; width: 18px; border-radius: 50%; background: var(--accent); cursor: pointer; box-shadow: 0 0 10px var(--accent-glow);
+        }
+
+        .status-bar {
+            height: var(--status-h); background: var(--surface); border-top: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between; padding: 0 20px;
+            font-size: 0.65rem; color: var(--text-dim);
+        }
+
+        /* Mobile Adjustments */
+        @media (max-width: 768px) {
+            .btn span { display: none; }
+            .brand span { display: none; }
+            .tab-bar { padding: 0 5px; }
+        }
+    </style>
+</head>
+<body class="theme-aurora">
+
+    <header class="main-header">
+        <div class="brand">
+            <div class="orb"></div>
+            NEXORA<span>STUDIO</span>
+        </div>
+        <div class="toolbar">
+            <button class="btn" onclick="addNewFile()"><span>📄 New</span></button>
+            <button class="btn" onclick="beautifyCode()"><span>✨ Format</span></button>
+            <button class="btn" onclick="saveProject()"><span>💾 Save</span></button>
+            <button class="btn" onclick="bundleDownload()"><span>📥 Export</span></button>
+            <button class="btn btn-run" onclick="launchPreview()"><span>▶ RUN</span></button>
+            <button class="btn" onclick="toggleSettings()"><span>⚙️ Settings</span></button>
+        </div>
+    </header>
+
+    <nav class="tab-bar" id="vfs-tabs"></nav>
+
+    <main id="workspace-root">
+        <div id="monaco-host" style="width:100%; height:100%;"></div>
+    </main>
+
+    <footer class="status-bar">
+        <div id="stat-file">File: index.html</div>
+        <div id="stat-cursor">Ln 1, Col 1</div>
+    </footer>
+
+    <!-- FILE CONTEXT MENU -->
+    <div id="file-menu">
+        <div class="menu-item" onclick="renameTargetFile()">✏️ Rename Item</div>
+        <div class="menu-item" onclick="duplicateTargetFile()">📋 Duplicate File</div>
+        <div class="menu-item" onclick="beautifyCode()">✨ Format File</div>
+        <div class="menu-item" style="color:#ff5555" onclick="deleteTargetFile()">🗑️ Delete File</div>
+    </div>
+
+    <!-- PREVIEW OVERLAY -->
+    <div class="preview-cinema" id="preview-box">
+        <div class="preview-controls">
+            <div style="display:flex; gap:10px;">
+                <button class="btn" onclick="setPreviewDevice('desktop')">🖥️ Desktop</button>
+                <button class="btn" onclick="setPreviewDevice('mobile')">📱 Mobile</button>
+                <button class="btn" onclick="launchPreview()">🔄 Reload</button>
+            </div>
+            <button class="btn" style="background:#ff3333; border:none; color:white;" onclick="closePreview()">✕ Close Preview</button>
+        </div>
+        <div class="iframe-stage">
+            <iframe id="preview-frame" class="stage-desktop"></iframe>
+        </div>
+    </div>
+
+    <!-- SETTINGS DASHBOARD -->
+    <div class="settings-win" id="settings-gui">
+        <h2 style="margin-top:0; font-weight: 300;">System Preferences</h2>
+        
+        <div class="field">
+            <label>VISUAL ENVIRONMENT</label>
+            <select id="theme-pick" class="btn" style="width:100%; height:45px;" onchange="changeSystemTheme(this.value)">
+                <option value="theme-aurora">Aurora Glass (Neon Green)</option>
+                <option value="theme-midnight-neon">Midnight Neon (Pink/Purple)</option>
+                <option value="theme-quantum">Quantum Blue (Pro Blue)</option>
+                <option value="theme-carbon">Carbon Pulse (White/Gray)</option>
+            </select>
+        </div>
+
+        <div class="field">
+            <label>EDITOR FONT SIZE: <span id="font-display">14</span>px</label>
+            <input type="range" min="10" max="25" value="14" id="font-range" oninput="applyEditorSettings()">
+        </div>
+
+        <div class="field">
+            <label>WORD WRAPPING</label>
+            <select id="wrap-pick" class="btn" style="width:100%; height:40px;" onchange="applyEditorSettings()">
+                <option value="on">On (Wrapped)</option>
+                <option value="off">Off (Horizontal Scroll)</option>
+            </select>
+        </div>
+
+        <div class="field">
+            <label>AUTO-SAVE SESSIONS</label>
+            <input type="checkbox" checked id="auto-save-toggle">
+        </div>
+
+        <button class="btn btn-run" style="width:100%; height:50px; font-size:1rem;" onclick="toggleSettings()">APPLY CONFIGURATION</button>
+    </div>
+
+    <script>
+        let editor;
+        let activeFile = 'index.html';
+        let targetFile = null;
+
+        // --- VIRTUAL FILE SYSTEM ---
+        let vfs = {
+            'index.html': { lang: 'html', content: `<!DOCTYPE html>\n<html>\n<head>\n  <meta charset="utf-8">\n  <link rel="stylesheet" href="style.css">\n</head>\n<body>\n  <div class="container">\n    <div class="logo"></div>\n    <h1>Nexora Titan</h1>\n    <p>Professional Preview & Formatters Active</p>\n    <button onclick="ping()">Test Logic</button>\n  </div>\n  <script src="script.js"><\/script>\n</body>\n</html>` },
+            'style.css': { lang: 'css', content: `body { background: #020205; color: #00ffcc; font-family: 'Outfit', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }\n.container { border: 1px solid var(--accent); padding: 50px; border-radius: 30px; text-align: center; box-shadow: 0 0 50px rgba(0,255,204,0.15); }\nbutton { margin-top: 20px; padding: 12px 24px; background: #00ffcc; border: none; border-radius: 12px; cursor: pointer; font-weight: 600; }` },
+            'script.js': { lang: 'javascript', content: `function ping() {\n  console.log("System Operational");\n  alert("Neural Logic Level 2 Connected.");\n}` }
+        };
+
+        // --- MONACO INITIALIZATION ---
+        require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
+        require(['vs/editor/editor.main'], function() {
+            editor = monaco.editor.create(document.getElementById('monaco-host'), {
+                value: vfs[activeFile].content,
+                language: 'html',
+                theme: 'vs-dark',
+                automaticLayout: true,
+                fontSize: 14,
+                fontFamily: 'JetBrains Mono',
+                minimap: { enabled: true },
+                padding: { top: 20 },
+                cursorSmoothCaretAnimation: "on",
+                smoothScrolling: true,
+                scrollbar: { verticalScrollbarSize: 5 }
+            });
+
+            // Logic: Content Change Update VFS
+            editor.onDidChangeModelContent(() => {
+                vfs[activeFile].content = editor.getValue();
+                if(document.getElementById('auto-save-toggle').checked) localStorage.setItem('nexora_data', JSON.stringify(vfs));
+            });
+
+            editor.onDidChangeCursorPosition(e => {
+                document.getElementById('stat-cursor').innerText = `Ln ${e.position.lineNumber}, Col ${e.position.column}`;
+            });
+
+            renderTabs();
+        });
+
+        // --- UI & TAB ENGINE ---
+        function renderTabs() {
+            const bar = document.getElementById('vfs-tabs');
+            bar.innerHTML = '';
+            Object.keys(vfs).forEach(name => {
+                const tab = document.createElement('div');
+                tab.className = `tab ${name === activeFile ? 'active' : ''}`;
+                tab.innerHTML = `
+                    <span onclick="switchFile('${name}')">📄 ${name}</span>
+                    <span class="tab-options" onclick="showFileMenu(event, '${name}')">▼</span>
+                `;
+                bar.appendChild(tab);
+            });
+            document.getElementById('stat-file').innerText = `File: ${activeFile}`;
+        }
+
+        function switchFile(name) {
+            activeFile = name;
+            const model = monaco.editor.createModel(vfs[name].content, vfs[name].lang);
+            editor.setModel(model);
+            renderTabs();
+        }
+
+        function showFileMenu(e, name) {
+            e.stopPropagation();
+            targetFile = name;
+            const menu = document.getElementById('file-menu');
+            menu.style.display = 'block';
+            menu.style.left = e.pageX + 'px';
+            menu.style.top = (e.pageY + 10) + 'px';
+            document.addEventListener('click', () => menu.style.display = 'none', {once: true});
+        }
+
+        // --- ACTION HANDLERS ---
+        function addNewFile() {
+            const n = prompt("Filename (e.g. login.html):");
+            if(n) {
+                const ext = n.split('.').pop();
+                const m = { html:'html', css:'css', js:'javascript' };
+                vfs[n] = { lang: m[ext] || 'plaintext', content: '' };
+                switchFile(n);
+            }
+        }
+
+        function saveProject() {
+            localStorage.setItem('nexora_data', JSON.stringify(vfs));
+            const btn = document.querySelector('button[onclick="saveProject()"]');
+            btn.innerHTML = "✅ SAVED";
+            setTimeout(() => btn.innerHTML = "<span>💾 Save</span>", 1500);
+        }
+
+        async function bundleDownload() {
+            const zip = new JSZip();
+            Object.keys(vfs).forEach(fn => zip.file(fn, vfs[fn].content));
+            const content = await zip.generateAsync({type:"blob"});
+            saveAs(content, "nexora_export.zip");
+        }
+
+        function beautifyCode() {
+            editor.getAction('editor.action.formatDocument').run();
+        }
+
+        // --- PREVIEW ENGINE (TITAN VERSION) ---
+        function launchPreview() {
+            const box = document.getElementById('preview-box');
+            const frame = document.getElementById('preview-frame');
+            
+            let html = vfs['index.html'] ? vfs['index.html'].content : '<h1>index.html missing</h1>';
+            let css = `<style>${Object.values(vfs).filter(f => f.lang === 'css').map(f => f.content).join('\n')}</style>`;
+            let js = `<script>${Object.values(vfs).filter(f => f.lang === 'javascript').map(f => f.content).join('\n')}<\/script>`;
+
+            let bundled = html.replace('</head>', `${css}</head>`).replace('</body>', `${js}</body>`);
+            const blob = new Blob([bundled], { type: 'text/html' });
+            frame.src = URL.createObjectURL(blob);
+            box.style.display = 'flex';
+        }
+
+        function closePreview() { document.getElementById('preview-box').style.display = 'none'; }
+
+        function setPreviewDevice(mode) {
+            const f = document.getElementById('preview-frame');
+            f.className = mode === 'mobile' ? 'stage-mobile' : 'stage-desktop';
+        }
+
+        // --- SETTINGS CONTROLLER ---
+        function toggleSettings() {
+            document.getElementById('settings-gui').classList.toggle('active');
+        }
+
+        function changeSystemTheme(val) { document.body.className = val; }
+
+        function applyEditorSettings() {
+            const size = document.getElementById('font-range').value;
+            const wrap = document.getElementById('wrap-pick').value;
+            document.getElementById('font-display').innerText = size;
+            editor.updateOptions({
+                fontSize: parseInt(size),
+                wordWrap: wrap
+            });
+        }
+
+        function deleteTargetFile() {
+            if(confirm(`Delete ${targetFile}?`)) {
+                delete vfs[targetFile];
+                switchFile(Object.keys(vfs)[0]);
+            }
+        }
+
+        // Dynamic Resize Logic
+        if(window.visualViewport) {
+            window.visualViewport.addEventListener('resize', () => {
+                document.body.style.height = window.visualViewport.height + 'px';
+                if(editor) editor.layout();
+            });
+        }
+    </script>
+</body>
+</html>
